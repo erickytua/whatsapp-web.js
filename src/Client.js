@@ -1306,32 +1306,37 @@ async attachEventListeners() {
             for (const listener of this._attachedListeners) {
                 try {
                     await this.pupPage.evaluate((funcName) => {
-                        if (window[funcName]) {
-                            // Remove all event bindings first
-                            const storeEvents = [
-                                'Msg', 'AppState', 'Conn', 'Call', 'Chat', 
-                                'AddonReactionTable', 'AddonPollVoteTable'
-                            ];
-                            
-                            storeEvents.forEach(store => {
-                                if (window.Store && window.Store[store]) {
-                                    window.Store[store].off('change');
-                                    window.Store[store].off('change:type');
-                                    window.Store[store].off('change:ack');
-                                    window.Store[store].off('change:isUnsentMedia');
-                                    window.Store[store].off('remove');
-                                    window.Store[store].off('change:body');
-                                    window.Store[store].off('change:caption');
-                                    window.Store[store].off('change:state');
-                                    window.Store[store].off('change:battery');
-                                    window.Store[store].off('add');
-                                    window.Store[store].off('change:archive');
-                                    window.Store[store].off('change:unreadCount');
-                                }
-                            });
-                            
-                            // Remove the exposed function
-                            delete window[funcName];
+                        try {
+                            if (!window) return;
+                            if (window[funcName]) {
+                                // Remove all event bindings first (only if module supports .off)
+                                const storeEvents = [
+                                    'Msg', 'AppState', 'Conn', 'Call', 'Chat', 
+                                    'AddonReactionTable', 'AddonPollVoteTable'
+                                ];
+
+                                storeEvents.forEach(store => {
+                                    try {
+                                        const mod = window.Store && window.Store[store];
+                                        if (!mod) return;
+                                        if (typeof mod.off === 'function') {
+                                            // Try to remove common event types safely
+                                            const events = ['change', 'change:type', 'change:ack', 'change:isUnsentMedia', 'remove', 'change:body', 'change:caption', 'change:state', 'change:battery', 'add', 'change:archive', 'change:unreadCount'];
+                                            events.forEach(ev => {
+                                                try { mod.off(ev); } catch (e) { /* ignore if not supported */ }
+                                            });
+                                        }
+                                    } catch (e) {
+                                        /* ignore module-level cleanup errors */
+                                    }
+                                });
+
+                                // Remove the exposed function safely
+                                try { delete window[funcName]; } catch (e) { /* ignore */ }
+                            }
+                        } catch (e) {
+                            // swallow page-side errors
+                            console.warn('Listener cleanup page-eval error:', e && e.message);
                         }
                     }, listener.funcName);
                 } catch (error) {
