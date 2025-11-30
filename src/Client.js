@@ -225,28 +225,55 @@ class Client extends EventEmitter {
                 if (pairWithPhoneNumber.phoneNumber) {
                     // Ensure no page-side function blocks exposeFunction
                     await this.pupPage.evaluate(() => { try { delete window.onCodeReceivedEvent; } catch(e) {} });
-                    await exposeFunctionIfAbsent(this.pupPage, 'onCodeReceivedEvent', async (code) => {
-                        console.log('Pairing code received:', code);
-                        this.emit(Events.CODE_RECEIVED, code);
-                        return code;
-                    });
+                    try {
+                        await this.pupPage.exposeFunction('onCodeReceivedEvent', async (code) => {
+                            console.log('Pairing code received:', code);
+                            this.emit(Events.CODE_RECEIVED, code);
+                            return code;
+                        });
+                        console.log('Exposed onCodeReceivedEvent via puppeteer.exposeFunction');
+                    } catch (e) {
+                        console.warn('pupPage.exposeFunction failed for onCodeReceivedEvent, falling back:', e && e.message);
+                        await exposeFunctionIfAbsent(this.pupPage, 'onCodeReceivedEvent', async (code) => {
+                            console.log('Pairing code received (fallback):', code);
+                            this.emit(Events.CODE_RECEIVED, code);
+                            return code;
+                        });
+                    }
                     this.requestPairingCode(pairWithPhoneNumber.phoneNumber, pairWithPhoneNumber.showNotification, pairWithPhoneNumber.intervalMs);
                 } else {
                     let qrRetries = 0;
                     // Ensure no page-side function blocks exposeFunction
                     await this.pupPage.evaluate(() => { try { delete window.onQRChangedEvent; } catch(e) {} });
-                    await exposeFunctionIfAbsent(this.pupPage, 'onQRChangedEvent', async (qr) => {
-                        console.log('QR code updated');
-                        this.emit(Events.QR_RECEIVED, qr);
-                        if (this.options.qrMaxRetries > 0) {
-                            qrRetries++;
-                            if (qrRetries > this.options.qrMaxRetries) {
-                                console.error('Max QR code retries reached');
-                                this.emit(Events.DISCONNECTED, 'Max qrcode retries reached');
-                                await this.destroy();
+                    try {
+                        await this.pupPage.exposeFunction('onQRChangedEvent', async (qr) => {
+                            console.log('QR code updated');
+                            this.emit(Events.QR_RECEIVED, qr);
+                            if (this.options.qrMaxRetries > 0) {
+                                qrRetries++;
+                                if (qrRetries > this.options.qrMaxRetries) {
+                                    console.error('Max QR code retries reached');
+                                    this.emit(Events.DISCONNECTED, 'Max qrcode retries reached');
+                                    await this.destroy();
+                                }
                             }
-                        }
-                    });
+                        });
+                        console.log('Exposed onQRChangedEvent via puppeteer.exposeFunction');
+                    } catch (e) {
+                        console.warn('pupPage.exposeFunction failed for onQRChangedEvent, falling back:', e && e.message);
+                        await exposeFunctionIfAbsent(this.pupPage, 'onQRChangedEvent', async (qr) => {
+                            console.log('QR code updated (fallback)');
+                            this.emit(Events.QR_RECEIVED, qr);
+                            if (this.options.qrMaxRetries > 0) {
+                                qrRetries++;
+                                if (qrRetries > this.options.qrMaxRetries) {
+                                    console.error('Max QR code retries reached');
+                                    this.emit(Events.DISCONNECTED, 'Max qrcode retries reached');
+                                    await this.destroy();
+                                }
+                            }
+                        });
+                    }
 
                     // ✅ FIX: Enhanced QR generation with proper error handling
                     const qrGenerated = await this.pupPage.evaluate(async () => {
