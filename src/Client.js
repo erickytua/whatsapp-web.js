@@ -223,6 +223,8 @@ class Client extends EventEmitter {
 
                 // Register qr/code events
                 if (pairWithPhoneNumber.phoneNumber) {
+                    // Ensure no page-side function blocks exposeFunction
+                    await this.pupPage.evaluate(() => { try { delete window.onCodeReceivedEvent; } catch(e) {} });
                     await exposeFunctionIfAbsent(this.pupPage, 'onCodeReceivedEvent', async (code) => {
                         console.log('Pairing code received:', code);
                         this.emit(Events.CODE_RECEIVED, code);
@@ -231,6 +233,8 @@ class Client extends EventEmitter {
                     this.requestPairingCode(pairWithPhoneNumber.phoneNumber, pairWithPhoneNumber.showNotification, pairWithPhoneNumber.intervalMs);
                 } else {
                     let qrRetries = 0;
+                    // Ensure no page-side function blocks exposeFunction
+                    await this.pupPage.evaluate(() => { try { delete window.onQRChangedEvent; } catch(e) {} });
                     await exposeFunctionIfAbsent(this.pupPage, 'onQRChangedEvent', async (qr) => {
                         console.log('QR code updated');
                         this.emit(Events.QR_RECEIVED, qr);
